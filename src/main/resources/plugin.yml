@@ -1,0 +1,4 @@
+name: ChronoCore
+version: '${project.version}'
+main: me.kenvera.chronocore.ChronoCore
+api-version: '1.19'
