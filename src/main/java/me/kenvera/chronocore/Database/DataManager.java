@@ -1,4 +1,4 @@
-package me.kenvera.chronocore.database;
+package me.kenvera.chronocore.Database;
 
 import java.io.File;
 import java.io.IOException;

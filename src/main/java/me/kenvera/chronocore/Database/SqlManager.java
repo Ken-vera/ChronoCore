@@ -1,4 +1,4 @@
-package me.kenvera.chronocore.database;
+package me.kenvera.chronocore.Database;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -12,7 +12,7 @@ public class SqlManager {
     private final ChronoCore plugin;
     private static HikariDataSource dataSource;
 
-    private static final String CREATE_TABLE_PLAYER_DATA = "CREATE TABLE IF NOT EXISTS CNS1_cnplayerdata_1.player_data (uuid VARCHAR(36) PRIMARY KEY, username VARCHAR(18), `group` VARCHAR(18), whitelisted BOOLEAN, first_join LONGTEXT, last_join LONGTEXT)";
+    private static final String CREATE_TABLE_PLAYER_DATA = "CREATE TABLE IF NOT EXISTS CNS1_cnplayerdata_1.player_data (uuid VARCHAR(36) PRIMARY KEY, username VARCHAR(18), `group` VARCHAR(255), whitelisted BOOLEAN, muted VARCHAR(255), first_join LONGTEXT, last_join LONGTEXT)";
 
     public SqlManager(ChronoCore plugin) {
         this.plugin = plugin;

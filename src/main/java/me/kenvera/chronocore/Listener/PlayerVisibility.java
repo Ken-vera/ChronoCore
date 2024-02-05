@@ -1,4 +1,4 @@
-package me.kenvera.chronocore.listeners;
+package me.kenvera.chronocore.Listener;
 
 import me.kenvera.chronocore.ChronoCore;
 import org.bukkit.Bukkit;

@@ -2,3 +2,8 @@ name: ChronoCore
 version: '${project.version}'
 main: me.kenvera.chronocore.ChronoCore
 api-version: '1.19'
+commands:
+  group:
+    permission: chronocore.group
+  debugc:
+    permission: chronocore.debug

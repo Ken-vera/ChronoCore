@@ -1,7 +1,7 @@
-package me.kenvera.chronocore.database;
+package me.kenvera.chronocore.Database;
 
 import me.kenvera.chronocore.ChronoCore;
-import me.kenvera.chronocore.listeners.RedisListeners;
+import me.kenvera.chronocore.Listener.RedisListeners;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -48,6 +48,16 @@ public class RedisManager {
         });
     }
 
+    public void publish(String channel, String message) {
+        executorService.execute(() -> {
+            try (Jedis jedis = jedisPool.getResource()) {
+                jedis.publish(channel, message);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
     public void unSubscribe() {
         if (jedisPubSub != null) {
             jedisPubSub.unsubscribe();
@@ -59,5 +69,15 @@ public class RedisManager {
         unSubscribe();
         jedisPool.close();
         executorService.shutdown();
+    }
+
+    public JedisPool getJedis() {
+        return jedisPool;
+    }
+
+    public String getKey(String key) {
+        try (Jedis jedis = jedisPool.getResource()) {
+            return jedis.get(key);
+        }
     }
 }
