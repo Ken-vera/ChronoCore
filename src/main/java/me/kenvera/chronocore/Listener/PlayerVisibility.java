@@ -21,8 +21,8 @@ import java.util.concurrent.TimeUnit;
 
 public class PlayerVisibility implements Listener {
     private final ChronoCore plugin;
-    public PlayerVisibility(ChronoCore plugin) {
-        this.plugin = plugin;
+    public PlayerVisibility() {
+        this.plugin = ChronoCore.getInstance();
     }
 
     @EventHandler

@@ -3,6 +3,7 @@ package me.kenvera.chronocore.Database;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import me.kenvera.chronocore.ChronoCore;
+import org.bukkit.Bukkit;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -12,7 +13,7 @@ public class SqlManager {
     private final ChronoCore plugin;
     private static HikariDataSource dataSource;
 
-    private static final String CREATE_TABLE_PLAYER_DATA = "CREATE TABLE IF NOT EXISTS CNS1_cnplayerdata_1.player_data (uuid VARCHAR(36) PRIMARY KEY, username VARCHAR(18), `group` VARCHAR(255), whitelisted BOOLEAN, muted VARCHAR(255), first_join LONGTEXT, last_join LONGTEXT)";
+    private static final String CREATE_TABLE_PLAYER_DATA = "CREATE TABLE IF NOT EXISTS player_data(uuid VARCHAR(36) PRIMARY KEY, username VARCHAR(18), `group` VARCHAR(255), whitelisted BOOLEAN, muted VARCHAR(255), first_join LONGTEXT, last_join LONGTEXT)";
 
     public SqlManager(ChronoCore plugin) {
         this.plugin = plugin;
@@ -24,7 +25,7 @@ public class SqlManager {
         String database = plugin.getDataManager().getConfig("config.yml").get().getString("mysql.database");
         String ssl = plugin.getDataManager().getConfig("config.yml").get().getString("mysql.ssl");
 
-        plugin.getLogger().severe(plugin.getPrefix() + "§eConnection Pool Initiating!");
+        Bukkit.getLogger().severe(plugin.getPrefix() + "§eConnection Pool Initiating!");
         HikariConfig config = new HikariConfig();
         config.setUsername(username);
         config.setPassword(password);

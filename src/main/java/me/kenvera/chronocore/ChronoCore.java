@@ -2,23 +2,24 @@ package me.kenvera.chronocore;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import me.kenvera.chronocore.Command.DebugCommand;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import me.kenvera.chronocore.Command.GroupCommand;
 import me.kenvera.chronocore.Database.DataManager;
 import me.kenvera.chronocore.Database.RedisManager;
 import me.kenvera.chronocore.Database.SqlManager;
-import me.kenvera.chronocore.Handler.BanHandler;
-import me.kenvera.chronocore.Handler.MuteHandler;
+import me.kenvera.chronocore.Handler.*;
 import me.kenvera.chronocore.Hook.PlaceholderManager;
 import me.kenvera.chronocore.Listener.ChatListener;
 import me.kenvera.chronocore.Listener.PlayerSession;
-import me.kenvera.chronocore.Handler.PlayerData;
-import me.kenvera.chronocore.Object.Mute;
+import me.kenvera.chronocore.Listener.PlayerVisibility;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -28,32 +29,40 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public final class ChronoCore extends JavaPlugin {
+public final class ChronoCore extends JavaPlugin implements Listener {
     public static ChronoCore instance;
     private final Cache<String, Cache<UUID, Long>> cooldowns = Caffeine.newBuilder().build();
+    private static ExecutorService executorService;
     private SqlManager sqlManager;
     private RedisManager redisManager;
-    private PlayerSession playerSession;
-    private PlayerData playerData;
+    private GroupHandler playerData;
     private DataManager dataManager;
     private BanHandler banHandler;
     private MuteHandler muteHandler;
+    private GroupHandlerOld groupHandler;
+    private PlayerDataHandler playerDataHandler;
 
     @Override
     public void onEnable() {
         instance = this;
+        executorService = Executors.newFixedThreadPool(2, new ThreadFactoryBuilder().setNameFormat("ChronoCoreMain").build());
         registerComponents();
         saveDefaultConfig();
-        this.getLogger().info("§bChronoCore §ais Enabled!");
+        this.getLogger().info("\u001b[38;2;85;255;255mChronoCore \u001b[92mis Enabled!");
     }
 
     @Override
     public void onDisable() {
-        HandlerList.unregisterAll(this);
+        HandlerList.unregisterAll((Plugin) this);
         redisManager.close();
         sqlManager.closeDataSource();
+        groupHandler.getExecutorService().shutdown();
+        executorService.shutdown();
         this.getLogger().info("§bChronoCore §cis Disabled!");
     }
 
@@ -61,20 +70,26 @@ public final class ChronoCore extends JavaPlugin {
         Plugin placeholderApi = Bukkit.getPluginManager().getPlugin("PlaceholderAPI");
         dataManager = new DataManager(this);
         sqlManager = new SqlManager(this);
-        redisManager = new RedisManager(this);
-        playerSession = new PlayerSession(this);
-        playerData = new PlayerData(this);
+        redisManager = new RedisManager();
+//        PlayerSession playerSession = new PlayerSession();
+        playerData = new GroupHandler(this);
         banHandler = new BanHandler();
         muteHandler = new MuteHandler();
+        playerDataHandler = new PlayerDataHandler();
         ChatListener chatListener = new ChatListener(this);
 
-        getServer().getPluginManager().registerEvents(playerSession, this);
+//        getServer().getPluginManager().registerEvents(playerSession, this);
         getServer().getPluginManager().registerEvents(chatListener, this);
-        Objects.requireNonNull(getCommand("group")).setExecutor(new GroupCommand(this));
-        Objects.requireNonNull(getCommand("debugc")).setExecutor(new DebugCommand(this));
+        getServer().getPluginManager().registerEvents(this, this);
+//        Objects.requireNonNull(getCommand("group")).setExecutor(new GroupCommand(this));
+//        Objects.requireNonNull(getCommand("debugc")).setExecutor(new DebugCommand(this));
 
         if (placeholderApi != null) {
             new PlaceholderManager(this).register();
+        }
+
+        if (Objects.requireNonNull(getDataManager().getConfig("config.yml").get().getString("server")).equalsIgnoreCase("lobby")) {
+            PlayerVisibility playerVisibility = new PlayerVisibility();
         }
     }
 
@@ -103,6 +118,28 @@ public final class ChronoCore extends JavaPlugin {
         }
     }
 
+    @EventHandler
+    public void onPluginEnable(PluginEnableEvent event) {
+        if (event.getPlugin().getName().equalsIgnoreCase("ChronoCord")) {
+            groupHandler = new GroupHandlerOld();
+        }
+    }
+
+    public CompletableFuture<String> getToken() {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection connection = sqlManager.getConnection();
+                 PreparedStatement statement = connection.prepareStatement("SELECT discord FROM token LIMIT 1")) {
+                ResultSet result = statement.executeQuery();
+                if (result.next()) {
+                    return result.getString("discord");
+                }
+            } catch (SQLException e) {
+                e.printStackTrace(System.out);
+            }
+            return null;
+        }, executorService);
+    }
+
     public String getPrefix() {
         return ChatColor.GRAY + "[" + ChatColor.GREEN + "Crazy " + ChatColor.WHITE + " Network" + ChatColor.GRAY + "]";
     }
@@ -119,20 +156,12 @@ public final class ChronoCore extends JavaPlugin {
         return sqlManager;
     }
 
-    public PlayerSession getPlayerSession() {
-        return playerSession;
-    }
-
-    public PlayerData getPlayerData() {
+    public GroupHandler getPlayerData() {
         return playerData;
     }
 
     public DataManager getDataManager() {
         return dataManager;
-    }
-
-    public static ChronoCore getInstance() {
-        return instance;
     }
 
     public BanHandler getBanHandler() {
@@ -143,20 +172,19 @@ public final class ChronoCore extends JavaPlugin {
         return muteHandler;
     }
 
-    public String getToken() {
-        try (Connection connection = sqlManager.getConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT discord FROM CNS1_cnplayerdata_1.token LIMIT 1")) {
-            ResultSet result = statement.executeQuery();
-            if (result.next()) {
-                return result.getString("discord");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace(System.out);
-        }
-        return null;
+    public GroupHandlerOld getGroupHandler() {
+        return groupHandler;
     }
 
-    public String getRedisChannel() {
-        return dataManager.getConfig("config.yml").get().getString("redis.channel");
+    public PlayerDataHandler getPlayerDataHandler() {
+        return playerDataHandler;
+    }
+
+    public ExecutorService getExecutorService() {
+        return executorService;
+    }
+
+    public static ChronoCore getInstance() {
+        return instance;
     }
 }

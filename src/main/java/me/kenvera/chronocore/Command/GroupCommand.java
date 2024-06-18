@@ -1,14 +1,16 @@
 package me.kenvera.chronocore.Command;
 
 import me.kenvera.chronocore.ChronoCore;
-import net.luckperms.api.model.group.Group;
+import me.kenvera.chronocore.Exception.GroupAdditionException;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public class GroupCommand implements CommandExecutor {
     private final ChronoCore plugin;
@@ -23,28 +25,41 @@ public class GroupCommand implements CommandExecutor {
             return false;
         }
 
-        if (args[0].equalsIgnoreCase("add")) {
-            if (args.length == 3) {
-                String group = args[2];
-                List<String> groups = plugin.getLuckPerms().getGroupManager().getLoadedGroups()
-                        .stream()
-                        .map(Group::getName).distinct().toList();
-
-                if (groups.contains(group)) {
-                    String player = args[1];
-                    String uuid = plugin.getPlayerData().getUUID(player);
-
-                    //"set_" + uuid + "_" + group
-                    plugin.getRedisManager().publish(plugin.getDataManager().getConfig("config.yml").get().getString("redis.channel"), "add_" + uuid + "_" + group + "_" + "proxy");
-                    plugin.getPlayerData().addGroup(uuid, group, null);
+        System.out.println(Thread.currentThread().getName());
+        CompletableFuture.runAsync(() -> {
+            System.out.println(Thread.currentThread().getName());
+            if (args[0].equalsIgnoreCase("add")) {
+                if (args.length == 3) {
+                    String group = args[2];
+                    try {
+                        Player player = Bukkit.getPlayer(args[1]);
+                        assert player != null;
+                        UUID uuid = player.getUniqueId();
+                        plugin.getGroupHandler().addGroup(uuid, group, null, true);
+                        System.out.println(Thread.currentThread().getName());
+                    } catch (GroupAdditionException e) {
+                        Bukkit.getLogger().severe(e.getMessage());
+                    }
+//                List<String> groups = plugin.getLuckPerms().getGroupManager().getLoadedGroups()
+//                        .stream()
+//                        .map(Group::getName).distinct().toList();
+//
+//                if (groups.contains(group)) {
+//                    Player player = Bukkit.getPlayer(args[1]);
+//                    assert player != null;
+//                    String playerName = player.getName();
+//                    UUID uuid = player.getUniqueId();
+//
+//                    plugin.getGroupHandler().addGroup(uuid, playerName, group, null, true);
+//                    return true;
+//                } else {
+//                    Bukkit.getLogger().severe("Group " + group + " is not a valid luckperms group!");
+//                }
                 } else {
-                    sender.sendMessage("§cGroup §7" + group + " §cis not a valid luckperms group!");
+                    Bukkit.getLogger().severe("Command argument is not valid!");
                 }
-            } else {
-                sender.sendMessage("§cCommand argument is not valid!");
             }
-        }
-        // group set <player> <group>
+        }, plugin.getGroupHandler().getExecutorService());
         return false;
     }
 }

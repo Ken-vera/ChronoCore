@@ -1,48 +1,58 @@
 package me.kenvera.chronocore.Listener;
 
 import me.kenvera.chronocore.ChronoCore;
-import me.kenvera.chronocore.Database.RedisManager;
+import me.kenvera.chronocore.Exception.GroupAdditionException;
+import org.bukkit.Bukkit;
+import org.json.JSONObject;
 import redis.clients.jedis.JedisPubSub;
+
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 public class RedisListeners extends JedisPubSub{
     private final ChronoCore plugin;
-    private final RedisManager redisManager;
     private final String channelName;
+    private final ExecutorService executorService;
 
-    public RedisListeners(ChronoCore plugin, RedisManager redisManager, String channelName) {
-        this.plugin = plugin;
-        this.redisManager = redisManager;
+    public RedisListeners(String channelName) {
+        this.plugin = ChronoCore.getInstance();
         this.channelName = channelName;
+        this.executorService = plugin.getExecutorService();
     }
 
     @Override
     public void onMessage(String channel, String message) {
-        if (channel.equals(channelName)) {
-            System.out.println("Received message on channel " + channel + ":" + message);
+        CompletableFuture.runAsync(() -> {
+            Bukkit.getLogger().warning("Received message on channel: " + channel + ":" + message);
+            if (channel.equals(channelName)) {
+                JSONObject jsonObject = new JSONObject(message);
 
-            String[] messageParts = message.split("_");
-            if (messageParts.length <= 3) {
-                String messageType = messageParts[0];
-                String uuid = messageParts[1];
-                String group = messageParts[2];
+                String action = jsonObject.optString("action");
+                UUID uuid = UUID.fromString(jsonObject.optString("uuid"));
+                String playerName = Bukkit.getOfflinePlayer(uuid).getName();
+                String group = jsonObject.optString("group", null);
+                String issuer = jsonObject.optString("issuer");
+                String server = jsonObject.optString("server");
+                boolean isServer = Objects.equals(plugin.getDataManager().getConfig("config.yml").get().getString("server"), server);
 
-                switch (messageType) {
-                    case "set" -> {
-                        plugin.getPlayerData().setGroup(uuid, group, null);
-                    }
-                    case "reset" -> {
-                        plugin.getPlayerData().setGroup(uuid, "default", null);
-                    }
-                    case "add" -> {
-                        plugin.getPlayerData().addGroup(uuid, group, null);
-                        System.out.println("add");
-                    }
-                    case "remove" -> {
-                        plugin.getPlayerData().removeGroup(uuid, group, null);
-                        System.out.println("remove");
+                if (!isServer) {
+                    try {
+                        switch (action) {
+                            case "add" -> plugin.getGroupHandler().addGroup(uuid, group, issuer, false);
+
+                            case "remove" -> plugin.getGroupHandler().removeGroup(uuid, group, issuer, false);
+
+                            case "set" -> plugin.getGroupHandler().setGroup(uuid, group, issuer, false);
+
+                            case "reset" -> plugin.getGroupHandler().resetGroup(uuid, issuer, false);
+                        }
+                    } catch (GroupAdditionException e) {
+                        plugin.getLogger().severe(e.getMessage());
                     }
                 }
             }
-        }
+        }, executorService);
     }
 }

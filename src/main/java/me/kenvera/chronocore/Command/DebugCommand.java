@@ -11,14 +11,17 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import redis.clients.jedis.Jedis;
 
 import java.awt.desktop.AboutEvent;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class DebugCommand implements CommandExecutor {
@@ -155,7 +158,101 @@ public class DebugCommand implements CommandExecutor {
                     }
                 }
             }
+        } else if (args[0].equalsIgnoreCase("async")) {
+            Player player = (Player) sender;
+            if (args[1].equalsIgnoreCase("invalidate")) {
+                plugin.getPlayerDataHandler().invalidateCache(player.getUniqueId());
+                player.sendMessage("Invalidated cache: " + player.getUniqueId().toString());
+                player.sendMessage(Thread.currentThread().getName());
+            } else if (args[1].equalsIgnoreCase("get")) {
+                player.sendMessage(Thread.currentThread().getName());
+                plugin.getPlayerDataHandler().getPlayerData(player.getUniqueId(), player.getName(), false)
+                        .thenAcceptAsync(playerData -> {
+                            if (playerData != null) {
+                                player.sendMessage("PlayerData Debug:");
+                                player.sendMessage("PlayerName: " + playerData.getPlayerName());
+                                player.sendMessage("Address: " + playerData.getAddress());
+                                player.sendMessage("InheritedGroup: " + playerData.getInheritedGroup());
+                                player.sendMessage(Thread.currentThread().getName());
+                            } else {
+                                player.sendMessage("Failed to retrieve PlayerData.");
+                            }
+                        })
+                        .exceptionally(ex -> {
+                            ex.printStackTrace();
+                            player.sendMessage("Error: " + ex.getMessage());
+                            return null;
+                        });
+            } else if (args[1].equalsIgnoreCase("load")) {
+                plugin.getPlayerDataHandler().loadData(player.getUniqueId());
+                player.sendMessage(Thread.currentThread().getName());
+            } else if (args[1].equalsIgnoreCase("reset")) {
+//                plugin.getGroupHandler().resetGroup(player.getUniqueId(), player.getName(), player.getName(), false);
+                player.sendMessage(Thread.currentThread().getName());
+            } else if (args[1].equalsIgnoreCase("migrate")) {
+                CompletableFuture.runAsync(() -> {
+                    String countSql = "SELECT COUNT(DISTINCT username) FROM player_data WHERE `group` != 'default'";
+                    int totalUserCount = 0;
+                    try (Connection connection = plugin.getSqlManager().getConnection();
+                         PreparedStatement countStatement = connection.prepareStatement(countSql)) {
+
+                        ResultSet countResultSet = countStatement.executeQuery();
+                        if (countResultSet.next()) {
+                            totalUserCount = countResultSet.getInt(1); // Total number of distinct usernames
+                        }
+                    } catch (SQLException e) {
+                        e.printStackTrace(System.err);
+                    }
+
+
+                    String sql = "SELECT * FROM player_data WHERE `group` != 'default'";
+                    int currentUserCount = 0;
+                    Set<String> processedUsers = new HashSet<>();
+                    try (Connection connection = plugin.getSqlManager().getConnection();
+                         PreparedStatement statement = connection.prepareStatement(sql)) {
+
+                        ResultSet resultSet = statement.executeQuery();
+                        Map<String, String> playerGroup = new HashMap<>();
+                        while (resultSet.next()) {
+                            String username = resultSet.getString("username");
+                            String group = resultSet.getString("group");
+                            playerGroup.put(username, group);
+                        }
+
+                        for (Map.Entry<String, String> entry : playerGroup.entrySet()) {
+                            String usernameMap = entry.getKey();
+
+                            if (!processedUsers.contains(usernameMap)) {
+                                processedUsers.add(usernameMap);
+                                currentUserCount++;
+                            }
+                            String groupMap = entry.getValue();
+
+                            String[] groups = groupMap.split(",");
+
+                            for (String groupMapKey : groups) {
+                                try (Jedis jedis = plugin.getRedisManager().getJedis().getResource()) {
+                                    jedis.rpush("group::" + usernameMap, groupMapKey);
+                                    double progressPercentage = Math.min((double) currentUserCount / totalUserCount * 100, 100);
+                                    System.out.println("Processing " + usernameMap + ":" + groupMapKey + " (" + String.format("%.2f", progressPercentage) + "%" + ")");
+
+                                    try {
+                                        Thread.sleep(1000);
+                                    } catch (InterruptedException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                            }
+                        }
+                    } catch (SQLException e) {
+                        e.printStackTrace(System.err);
+                    }
+                }, plugin.getExecutorService());
+            }
+
         }
+
+
 //        } else if (args[0].equalsIgnoreCase("token")) {
 //            try (Connection connection = plugin.getSqlManager().getConnection();
 //                 PreparedStatement statement = connection.prepareStatement(TOKEN)) {
