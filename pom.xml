@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>me.kenvera</groupId>
-    <artifactId>ChronoCore</artifactId>
+    <artifactId>chronocore</artifactId>
     <version>1.0</version>
     <packaging>jar</packaging>
 
@@ -43,6 +43,19 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>2.8.1</version>
+                <executions>
+                    <execution>
+                        <id>default-deploy</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>deploy</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
         <resources>
             <resource>
@@ -51,6 +64,14 @@
             </resource>
         </resources>
     </build>
+
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Ken-vera Apache Maven Packages</name>
+            <url>https://maven.pkg.github.com/Ken-vera/ChronoCore</url>
+        </repository>
+    </distributionManagement>
 
     <repositories>
         <repository>
